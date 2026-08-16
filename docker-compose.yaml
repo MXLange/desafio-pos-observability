@@ -1,0 +1,43 @@
+services:
+  zipkin:
+    image: openzipkin/zipkin:latest
+    ports:
+      - "9411:9411"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - zipkin
+
+  weatherapi:
+    build:
+      context: .
+      dockerfile: docker/weatherapi.Dockerfile
+    environment:
+      PORT: "8081"
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+      WEATHER_API_KEY: ${WEATHER_API_KEY}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - otel-collector
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+    environment:
+      PORT: "8080"
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+      WEATHER_API_URL: http://weatherapi:8081/weather
+    ports:
+      - "8080:8080"
+    depends_on:
+      - weatherapi
+      - otel-collector
